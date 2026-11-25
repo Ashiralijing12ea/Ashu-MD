@@ -1,0 +1,20 @@
+{
+  "name": "ASHU-MD Bot",
+  "description": "SESSION ID GENERATOR FOR WHATSAPP BOTS",
+  "keywords": [
+    "@ASHU-MD"
+  ],
+  "success_url": "/",
+  "buildpacks": [
+    {
+      "url": "https://github.com/heroku/heroku-buildpack-nodejs#latest"
+    }
+  ],
+  "env": {
+    "MESSAGE": {
+      "description": "Msg Attached With Session ID",
+      "value": "᯽𝐀𝐒𝐇𝐔-𝐌𝐃᯽",
+      "required": false
+    }
+  }
+}
