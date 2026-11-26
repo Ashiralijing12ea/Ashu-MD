@@ -139,7 +139,6 @@ const DESIGN = {
         "┃ *𝐂𝙾𝙼𝙼𝙰𝙽𝙳𝚂:* {COUNT}",
         "┃ *𝐌𝙾𝙳𝙴:* {MODE}",
         "┃ *𝐕𝙴𝚁𝚂𝙸𝙾𝙽:* {VERSION}",
-        "┃ *𝐕𝙸𝙿𝙼𝙳:* {PREFIX}vipmd",
         "╰━━━━━━⟡ ✦ ⟡━━━━━━╯"
     ].join("\n"),
 
@@ -169,6 +168,9 @@ const DESIGN = {
     MAX_CHARS: 3500          // ek message ki limit; zyada ho to menu khud agle message mein chala jata hai
 };
 // ═══════════════════════════════════════════════════════════
+
+// Saari commands ek hi message mein (WhatsApp text limit ~65000 chars; 836 commands ~15000 chars)
+const ONE_MESSAGE_MAX = 60000;
 
 const fill = (tpl, vars) => tpl.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? vars[k] : `{${k}}`));
 
@@ -265,27 +267,9 @@ cmd({
 
         const cats = [...LIST_ORDER.filter(c => grouped[c]), ...Object.keys(grouped).filter(c => !LIST_ORDER.includes(c)).sort()];
 
-        // 🆕 Tappable menus: ".menu" (category buttons) / ".menu 2" / ".menu list" / ".menu <category> [page]"
-        // Fail ho to purana text menu chalega.
-        const CAT_ALIAS = { misc: "utility", anime: "utility", games: "utility", emotions: "utility", system: "utility", settings: "extra", love: "extra", owner: "ashu", main: "ashu", image: "tools" };
-        const wantedEarly = String(ctx.text || ctx.q || (ctx.args || []).join(" ") || "").trim().toLowerCase().replace(/^\S+/, w => (grouped[w] ? w : (CAT_ALIAS[w] || w))); // asli category ho to alias nahi lagta (ANIME -> anime hi khule)
-        try {
-            const cm = require("./carousel-menu");
-            const parts = wantedEarly.split(/\s+/).filter(Boolean);
-            const wantsText = ["allmenu", "fullmenu", "commandlist"].includes(String(ctx.command || "").toLowerCase());
-            const wantsAll = parts.length && ["all", "full", "allmenu"].includes(parts[0]);
-            // poori list = registry-driven VIP text (same as .cmdlist)
-            if (wantsText || wantsAll) { await cm.sendCommandList(conn, from, mek); return; }
-            else if (!parts.length || /^\d+$/.test(parts[0])) {
-                if (await cm.sendCarouselMenu(conn, mek, m, ctx, parts[0])) { sendMenuVoice(conn, from, mek); return; }
-            } else if (["list", "categories", "category"].includes(parts[0])) {
-                if (await cm.sendCategoryPicker(conn, from, mek)) return;
-            } else if (!["all", "full", "allmenu"].includes(parts[0])) {
-                const cmCats = cm.groupCommands().cats;   // carousel wali grouping (video/prank regroup) ke hisaab se
-                const hit = cmCats.find(c => c === parts[0]) || cmCats.find(c => c.startsWith(parts[0]));
-                if (hit && await cm.sendCarouselMenu(conn, mek, m, ctx, parts[1], hit)) return;
-            }
-        } catch (_) { /* purane menu par chalo */ }
+        // 🆕 Ab har .menu (.menu list / .menu <category> / .menu all sab) = ek hi list mein saari commands
+        let cm = null;
+        try { cm = require("./carousel-menu"); } catch (_) { cm = null; }
         const channel = await getChannelInfo(conn, BOT_NAME);
         const newsletterContext = {
             mentionedJid: [m.sender].filter(Boolean),
@@ -300,71 +284,16 @@ cmd({
             } : {})
         };
 
-        // 🆕 ".menu <category>" — sirf us category ki commands, ek hi message mein
-        const wanted = String(ctx.text || ctx.q || (ctx.args || []).join(" ") || "").trim().toLowerCase().replace(/^\S+/, w => CAT_ALIAS[w] || w);
-        const catListText = () => {
-            // Pehla harf bold (𝐀), baqi small-caps (ᴅᴍɪɴ)  ->  .𝐀ᴅᴍɪɴ
-            const boldFirst = (ch) => /[a-z]/i.test(ch) ? String.fromCodePoint(0x1D400 + ch.toUpperCase().charCodeAt(0) - 65) : ch;
-            const pretty = (c) => PREFIX + boldFirst(c[0]) + toSmallCaps(c.slice(1));
-            const SHOW_ORDER = ["ashu", "general", "islamic", "group", "tools", "fun",
-                "download", "extra", "utility"];
-            const ordered = [
-                ...SHOW_ORDER.filter(c => cats.includes(c)),
-                ...cats.filter(c => !SHOW_ORDER.includes(c))
-            ];
-            const rowSizes = [2, 2, 3, 3, 3, 3]; // phir 3-3 har line mein
-            const rows = [];
-            for (let i = 0, r = 0; i < ordered.length; r++) {
-                const n = rowSizes[r] || 3;
-                rows.push("┃" + ordered.slice(i, i + n).map(pretty).join(" "));
-                i += n;
-            }
-            return [
-                "╭╍═❲ 𝗖𝗔𝗧𝗘𝗚𝗢𝗥𝗜𝗘𝗦",
-                ...rows,
-                "╰╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┈⊷",
-                "",
-                `> ${PREFIX}menu all ➜ sari commands`,
-                `> ${FOOTER}`
-            ].join("\n");
-        };
-        if (wanted === "list" || wanted === "categories" || wanted === "category") {
-            return conn.sendMessage(from, { text: catListText(), contextInfo: newsletterContext }, { quoted: mek });
-        }
-        const showAll = ["all", "full", "allmenu"].includes(wanted);
-        if (wanted && !showAll) {
-            const match = cats.find(c => c === wanted) || cats.find(c => c.startsWith(wanted));
-            if (!match) {
-                return ctx.reply(`❌ *${wanted}* naam ki category nahi mili.\n\nAvailable: ${cats.map(toSmallCaps).join(", ")}\n\nType *${PREFIX}menu* to see all categories.`);
-            }
-            const list = grouped[match].slice();
-            if (DESIGN.SORT_COMMANDS) list.sort((x, y) => x.name.localeCompare(y.name));
-            const blocks = splitBlocks(formatCategoryParts(match, list, PREFIX, DESIGN.MAX_CHARS), DESIGN.MAX_CHARS);
-            if (blocks.length) blocks[blocks.length - 1] += `\n\n> ${FOOTER}`; else blocks.push(`> ${FOOTER}`);
-            for (let i = 0; i < blocks.length; i++) {
-                const last = i === blocks.length - 1;
-                await conn.sendMessage(from, { text: blocks[i], contextInfo: last ? newsletterContext : undefined }, { quoted: mek });
-            }
-            return;
+        // header: profile card (photo ke saath), phir SARI commands ek hi list mein
+        let header = "";
+        try { header = cm.profileText(await cm.getProfile(conn, mek, ctx)); } catch (_) {
+            header = fill(DESIGN.HEADER, {
+                BOT: BOT_NAME, OWNER: OWNER_NAME, PLATFORM: "WHATSAPP", PREFIX, UPTIME: shortUptime(process.uptime()),
+                COUNT: totalCommands, MODE, VERSION
+            });
         }
 
-        // DEFAULT ".menu" — header + SARI commands category ke hisaab se (".menu list" = sirf categories)
-        let header = fill(DESIGN.HEADER, {
-            BOT: BOT_NAME, OWNER: OWNER_NAME, PLATFORM: "WHATSAPP", PREFIX, UPTIME: shortUptime(process.uptime()),
-            COUNT: totalCommands, MODE, VERSION
-        });
-        const fullBlocks = cats.flatMap(c => {
-            const list = grouped[c].slice();
-            if (DESIGN.SORT_COMMANDS) list.sort((x, y) => x.name.localeCompare(y.name));
-            return formatCategoryParts(c, list, PREFIX, DESIGN.MAX_CHARS);
-        }).filter(Boolean);
-        const fullChunks = splitBlocks(fullBlocks, DESIGN.MAX_CHARS)
-            .map((t, i) => (i === 0 ? `${fill(DESIGN.ALL_TITLE, { TITLE: toBold(DESIGN.ALL_TITLE_TEXT) })}\n\n` : "") + t + `\n\n> ${FOOTER}`);
-        
-        // profile wala header (carousel fail hone par bhi user ki profile dikhe)
-        try { header = cm.profileText(await cm.getProfile(conn, mek, ctx)); } catch (_) { /* purana header */ }
-
-        // 1) menu photo + chhota header (caption chhota rakha taake image kabhi fail na ho)
+        // 1) menu photo + header
         try {
             await conn.sendMessage(from, { image: { url: MENU_IMAGE_URL }, caption: header, contextInfo: newsletterContext, __noFooter: true }, { quoted: mek });
         } catch (e) {
@@ -376,14 +305,12 @@ cmd({
             }
         }
 
-        // 2) sari commands (ek ya zyada messages; har message ke neeche footer)
-        if (showAll) {
-            for (let i = 0; i < fullChunks.length; i++) {
-                const last = i === fullChunks.length - 1;
-                await conn.sendMessage(from, { text: fullChunks[i], contextInfo: last ? newsletterContext : undefined });
-            }
-        } else {
-            await conn.sendMessage(from, { text: catListText(), contextInfo: newsletterContext });
+        // 2) ek hi list: saari commands A-Z (zyada hon to agle message mein chali jati hain)
+        const parts = cm ? cm.fullListMessages(ONE_MESSAGE_MAX, BOT_NAME) : [];
+        for (let i = 0; i < parts.length; i++) {
+            const last = i === parts.length - 1;
+            await conn.sendMessage(from, { text: parts[i], contextInfo: last ? newsletterContext : undefined });
+            if (!last) await new Promise(r => setTimeout(r, 500));
         }
 
         // menu voice (data/menu-voice/menu.mp3)

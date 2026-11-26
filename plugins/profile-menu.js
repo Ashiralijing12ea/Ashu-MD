@@ -20,7 +20,7 @@ cmd({
     pattern: 'cmdlist',
     alias: ['commands', 'allcmds', 'listcmds'],
     use: '.cmdlist',
-    desc: 'Saari commands ki poori list (category wise)',
+    desc: 'Saari commands ek hi list mein',
     category: 'system',
     react: '📋',
     filename: __filename

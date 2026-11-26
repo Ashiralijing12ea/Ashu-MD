@@ -270,8 +270,6 @@ function profileText(pr) {
         `┃ 📦 ${smallCaps('commands')} ⟫ ${pr.total}\n` +
         `┃ ⏱️ ${smallCaps('uptime')}   ⟫ ${pr.uptime}\n` +
         `┃ 🕒 ${smallCaps('time')}     ⟫ ${pr.time}\n` +
-        `┣━━━━ ⟡ ${boldText('VIP LINK')} ⟡ ━━━━\n` +
-        `┃ 💎 ${pr.prefix}${smallCaps('vipmd')} ⟫ ${smallCaps('vip website link')} ✨\n` +
         `╰━━━━━━━⟡ ✦ ⟡━━━━━━━╯`;
 }
 
@@ -678,33 +676,27 @@ function fullListMessages(maxLen, nameOverride) {
     const head = `╔═══════◥◣◆◢◤═══════╗\n   ༺ 💎 ${boldText(bn)} 💎 ༻\n╚═══════◢◤◆◥◣═══════╝\n` +
         `┃ 👑 ${smallCaps('owner')} ⟫ ${config.OWNER_NAME || '-'}\n` +
         `┃ ⚡ ${smallCaps('prefix')} ➜ ${p}\n` +
-        `┃ 📦 ${total} ${smallCaps('commands')} · 📂 ${cats.length} ${smallCaps('categories')}\n` +
-        `┃ 🔰 ${p}menu ➜ ${smallCaps('swipe cards')}  ·  ${p}profile\n` +
-        `${vipmdLine(p)}\n`;
+        `┃ 📦 ${total} ${smallCaps('commands')}\n`;
     const foot = `\n\n${config.BOT_FOOTER || footerText(bn)}`;
-    const blocks = [];
-    for (const cat of cats) {
-        const list = grouped[cat].slice().sort((a, b) => a.localeCompare(b));
-        const top = `┏━━━❰ ${CATEGORY_ICONS[cat] || '📌'} ${boldText(cat.toUpperCase())} · ${list.length} ❱━━━┓`;
-        const bottom = `┗━━━━━━━⟡ ✦ ⟡━━━━━━━┛`;
-        const rows = [vipmdLine(p), ...list.map(x => `┃ ❖ ${p}${x}`)];
-        // lambi category ko poore boxes mein todo
-        let cur = [];
-        const flush = () => { if (cur.length) blocks.push(top + '\n' + cur.join('\n') + '\n' + bottom); cur = []; };
-        let size = top.length + bottom.length + 2;
-        for (const r of rows) {
-            if (size + r.length + 1 > maxLen - 300) { flush(); size = top.length + bottom.length + 2; }
-            cur.push(r); size += r.length + 1;
-        }
-        flush();
+
+    // Saari commands ek hi list mein (category ke dabbe nahi) — A-Z
+    const all = [...new Set(cats.flatMap(c => grouped[c]))].sort((a, b) => a.localeCompare(b));
+    const bottom = `┗━━━━━━━⟡ ✦ ⟡━━━━━━━┛`;
+    const topOf = (i, n) => `┏━━━❰ 📋 ${boldText('ALL COMMANDS')} · ${total}${n > 1 ? ` · ${i + 1}/${n}` : ''} ❱━━━┓`;
+
+    // lambi list ko kai poore boxes mein todo (har box <= maxLen)
+    const rows = all.map(x => `┃ ❖ ${p}${x}`);
+    rows.push(vipmdLine(p));   // .vipmd sabse neeche (aakhri line)
+    const chunks = [];
+    let cur = [], size = 0;
+    const budget = maxLen - 300 - head.length - foot.length;
+    for (const r of rows) {
+        if (cur.length && size + r.length + 1 > budget) { chunks.push(cur); cur = []; size = 0; }
+        cur.push(r); size += r.length + 1;
     }
-    const out = [];
-    let cur = head;
-    for (const b of blocks) {
-        if (cur.length + b.length + 2 > maxLen - foot.length) { out.push(cur.trimEnd()); cur = ''; }
-        cur += (cur ? '\n\n' : '\n') + b;
-    }
-    if (cur.trim()) out.push(cur.trimEnd());
+    if (cur.length) chunks.push(cur);
+
+    const out = chunks.map((c, i) => (i === 0 ? head + '\n' : '') + topOf(i, chunks.length) + '\n' + c.join('\n') + '\n' + bottom);
     out[out.length - 1] += foot;
     return out;
 }
@@ -712,7 +704,7 @@ const fullListText = () => fullListMessages(1e9).join('\n\n');
 
 async function sendCommandList(conn, from, quoted) {
     let name; try { name = await resolveBotName(conn); } catch (_) {}
-    const parts = fullListMessages(3800, name);
+    const parts = fullListMessages(60000, name);   // ek hi message mein saari commands
     for (let i = 0; i < parts.length; i++) {
         await conn.sendMessage(from, { text: parts[i] }, i === 0 ? { quoted } : undefined);
         if (i < parts.length - 1) await new Promise(r => setTimeout(r, 500));
